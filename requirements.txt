@@ -1,0 +1,6 @@
+torch
+torchvision
+grad-cam
+opencv-python
+matplotlib
+numpy==1.26.4

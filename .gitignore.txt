@@ -1,0 +1,13 @@
+# Ignore the environment
+venv/
+.env
+
+# Ignore the heavy data
+data/
+*.pth
+*.zip
+
+# Ignore Python junk
+__pycache__/
+*.py[cod]
+.vscode/

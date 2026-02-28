@@ -10,8 +10,6 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 import os
 import gdown
 
-MODEL_PATH = os.path.join(os.getcwd(), "deepfake_model.pth")
-model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
 
 # ─── Page Config ────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -478,10 +476,10 @@ def load_model():
         nn.Dropout(0.4),
         nn.Linear(256, 2)
     )
-    model.load_state_dict(torch.load(
-        r"C:\Users\crick\OneDrive\Desktop\Deepfake-Detector-AI\deepfake_model.pth",
-        map_location="cpu"
-    ))
+
+    MODEL_PATH = os.path.join(os.getcwd(), "deepfake_model.pth")
+    model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
+
     model.eval()
     return model
 

@@ -7,6 +7,14 @@ import torchvision.models as models
 from PIL import Image
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
+import os
+import gdown
+
+MODEL_PATH = "deepfake_model.pth"
+
+if not os.path.exists(MODEL_PATH):
+    url = "https://drive.google.com/uc?id=YOUR_FILE_ID"
+    gdown.download(url, MODEL_PATH, quiet=False)
 
 # ─── Page Config ────────────────────────────────────────────────────────────
 st.set_page_config(

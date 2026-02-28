@@ -1,6 +1,9 @@
 torch
 torchvision
 grad-cam
-opencv-python
+opencv-python-headless
 matplotlib
 numpy==1.26.4
+streamlit
+pillow
+gdown

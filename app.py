@@ -10,15 +10,8 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 import os
 import gdown
 
-import os
-import gdown
-
-MODEL_PATH = "deepfake_model.pth"
-GDRIVE_ID = "15Cdyiu36a7hHHWRboC2xXxDfdVx3hJR8"
-url = f"https://drive.google.com/uc?id={GDRIVE_ID}"
-
-if not os.path.exists(MODEL_PATH):
-    gdown.download(url, MODEL_PATH, quiet=False)
+MODEL_PATH = os.path.join(os.getcwd(), "deepfake_model.pth")
+model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
 
 # ─── Page Config ────────────────────────────────────────────────────────────
 st.set_page_config(

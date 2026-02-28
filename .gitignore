@@ -3,7 +3,7 @@ venv/
 .env
 
 # Ignore the heavy data
-data/
+Dataset/
 *.pth
 *.zip
 

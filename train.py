@@ -20,8 +20,11 @@ transform = transforms.Compose([
 ])
 
 # 3. Load Dataset
-dataset = datasets.ImageFolder('data', transform=transform)
-train_loader = DataLoader(dataset, batch_size=16, shuffle=True)
+train_dataset = datasets.ImageFolder('Dataset/Train', transform=transform)
+val_dataset = datasets.ImageFolder('Dataset/Validation', transform=transform)
+
+train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
 
 # 4. Model Surgery (Transfer Learning)
 model = models.resnet18(weights='IMAGENET1K_V1')
@@ -45,7 +48,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
 
 # 6. The Training Loop (The Impressive Part)
-epochs = 10
+epochs = 5
 print(f"Starting Training for {epochs} epochs...")
 
 for epoch in range(epochs):

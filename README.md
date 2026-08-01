@@ -1,4 +1,1 @@
-# 🛡️ Deepfake Detector AI
-A ResNet-18 based deep learning model that identifies AI-generated faces with Grad-CAM explainability heatmaps.
-
-Website : https://aideepfakedetector.streamlit.app/
+This project implements a deepfake image classifier using transfer learning on a pretrained ResNet-18 backbone with a custom classification head. The model distinguishes real photographs from AI-generated or manipulated images, with Grad-CAM integrated to visualize which regions of an image most influenced each prediction — making the model's decisions interpretable rather than a black box. The trained model is deployed as an interactive Streamlit web application, allowing users to upload an image and receive a real-time real/fake classification.

@@ -33,6 +33,8 @@ tests/           # pytest — runs against a tiny untrained fixture, no dataset 
 
 ## Setup
 
+Requires Python 3.12+ (pinned `numpy==2.5.3` has no wheels for older versions).
+
 ```bash
 python -m venv venv
 source venv/bin/activate   # venv\Scripts\activate on Windows

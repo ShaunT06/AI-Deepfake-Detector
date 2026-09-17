@@ -6,14 +6,14 @@ build-backend = "hatchling.build"
 name = "deepscan"
 version = "2.0.0"
 description = "Deepfake image classifier with Grad-CAM explainability"
-requires-python = ">=3.10"
+requires-python = ">=3.12"  # numpy==2.5.3 (requirements.txt) requires >=3.12
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/deepscan"]
 
 [tool.ruff]
 line-length = 110
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]

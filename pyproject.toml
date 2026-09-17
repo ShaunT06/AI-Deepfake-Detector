@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "deepscan"
+version = "2.0.0"
+description = "Deepfake image classifier with Grad-CAM explainability"
+requires-python = ">=3.10"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/deepscan"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# Streamlit page: long lines are embedded CSS/HTML markup, not code.
+"app/streamlit_app.py" = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,9 +1,8 @@
-torch
-torchvision
-grad-cam
-opencv-python-headless
-matplotlib
-numpy==1.26.4
-streamlit
-pillow
-gdown
+torch==2.14.0
+torchvision==0.29.0
+grad-cam==1.5.7
+opencv-python-headless==5.0.0.93
+matplotlib==3.11.2
+numpy==2.5.3
+streamlit==1.64.0
+pillow==12.3.0

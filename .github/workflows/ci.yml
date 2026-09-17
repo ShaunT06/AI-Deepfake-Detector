@@ -69,5 +69,40 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          NEXT_PUBLIC_API_URL: https://placeholder.invalid
+
+  web-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: web/requirements.txt
+
+      - name: Install dependencies
+        working-directory: web
+        run: pip install -r requirements.txt ruff
+
+      - name: Lint
+        run: ruff check web/api scripts/export_onnx.py
+
+      - name: Predict smoke test (real ONNX model, synthetic image)
+        working-directory: web/api
+        run: |
+          python -c "
+          import io
+          from PIL import Image
+          import predict
+
+          img = Image.new('RGB', (300, 300), color=(80, 140, 220))
+          buf = io.BytesIO()
+          img.save(buf, format='JPEG')
+
+          status, payload = predict.run_predict(buf.getvalue())
+          assert status == 200, payload
+          assert 0.0 <= payload['fake_prob'] <= 1.0
+          assert len(payload['gradcam_image_base64']) > 1000
+          print('web-api predict smoke test passed:', payload['fake_prob'], payload['backbone'])
+          "

@@ -11,3 +11,9 @@ Dataset/
 __pycache__/
 *.py[cod]
 .vscode/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Training artifacts
+*.trainlog.json

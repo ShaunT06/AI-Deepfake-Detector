@@ -1,0 +1,8 @@
+{
+  "deepfake_model.pth": {
+    "release_tag": "resnet18-v1",
+    "asset_name": "deepfake_model.pth",
+    "sha256": "bdcd5b79dd1b89d7ee748f6831814dcc8bca75a34ab6a3e574a73b0a95c18721",
+    "notes": "Legacy ResNet-18 checkpoint, bare state_dict format. Real/Fake label order is unverified — see README."
+  }
+}

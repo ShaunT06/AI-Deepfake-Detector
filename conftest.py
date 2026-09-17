@@ -1,0 +1,8 @@
+import os
+import sys
+
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+_SRC = os.path.join(_REPO_ROOT, "src")
+for _path in (_SRC, _REPO_ROOT):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)

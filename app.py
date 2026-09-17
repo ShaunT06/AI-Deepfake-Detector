@@ -1,14 +1,20 @@
-import streamlit as st
+import html
+import os
+
 import numpy as np
+import streamlit as st
 import torch
 import torch.nn as nn
-import torchvision.transforms as transforms
 import torchvision.models as models
-from PIL import Image
+import torchvision.transforms as transforms
+from PIL import Image, ImageOps, UnidentifiedImageError
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
-import os
-import gdown
+from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
+from label_map import load_class_to_idx
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10MB, matches the label shown to users
 
 
 # ─── Page Config ────────────────────────────────────────────────────────────
@@ -466,6 +472,9 @@ h1, h2, h3 { font-family: 'Syne', sans-serif; }
 
 
 # ─── Load Model ──────────────────────────────────────────────────────────────
+MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 @st.cache_resource
 def load_model():
     model = models.resnet18(weights=None)
@@ -477,11 +486,14 @@ def load_model():
         nn.Linear(256, 2)
     )
 
-    MODEL_PATH = os.path.join(os.getcwd(), "deepfake_model.pth")
-    model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
-
+    model_path = os.path.join(MODEL_DIR, "deepfake_model.pth")
+    model.load_state_dict(torch.load(model_path, map_location="cpu"))
     model.eval()
-    return model
+
+    class_to_idx, is_verified = load_class_to_idx(MODEL_DIR)
+    fake_idx = class_to_idx["Fake"]
+    real_idx = class_to_idx["Real"]
+    return model, fake_idx, real_idx, is_verified
 
 
 # ─── Transform ───────────────────────────────────────────────────────────────
@@ -493,38 +505,37 @@ transform = transforms.Compose([
 ])
 
 
-# ─── GradCAM ─────────────────────────────────────────────────────────────────
-def generate_gradcam(image: Image.Image):
-    """Real GradCAM using your trained ResNet-18 model."""
-    model = load_model()
-    target_layer = [model.layer4[-1]]
+# ─── Inference + GradCAM (single forward pass) ─────────────────────────────
+def run_analysis(image: Image.Image):
+    """Runs the model once and derives both the verdict and the GradCAM
+    heatmap for whichever class was actually predicted, instead of running
+    the model twice and hardcoding the heatmap to a guessed class index."""
+    model, fake_idx, real_idx, is_verified = load_model()
+
     img_resized = image.convert("RGB").resize((224, 224))
     input_tensor = transform(img_resized).unsqueeze(0)
-    rgb_img = np.array(img_resized) / 255.0
-    cam = GradCAM(model=model, target_layers=target_layer)
-    grayscale_cam = cam(input_tensor=input_tensor)[0]
-    visualization = show_cam_on_image(
-        rgb_img.astype(np.float32),
-        grayscale_cam,
-        use_rgb=True
-    )
-    return Image.fromarray(visualization), grayscale_cam
-
-
-# ─── Inference ───────────────────────────────────────────────────────────────
-def run_inference(image: Image.Image):
-    model = load_model()
-    tensor = transform(image).unsqueeze(0)
 
     with torch.no_grad():
-        output = model(tensor)
+        output = model(input_tensor)
         probs = torch.softmax(output, dim=1)[0]
 
-    # ImageFolder sorts alphabetically: index 0 = 'Fake', index 1 = 'Real'
-    # If your training printed Classes: ['Real', 'Fake'], swap these two lines
-    fake_prob = float(probs[0])
-    real_prob = float(probs[1])
+    fake_prob = float(probs[fake_idx])
+    real_prob = float(probs[real_idx])
     is_fake = fake_prob > 0.5
+    predicted_idx = fake_idx if is_fake else real_idx
+
+    # Explain the class the model actually predicted, not a fixed guess —
+    # otherwise "red = manipulation" is wrong whenever the verdict is REAL.
+    rgb_img = np.array(img_resized) / 255.0
+    target_layer = [model.layer4[-1]]
+    with GradCAM(model=model, target_layers=target_layer) as cam:
+        grayscale_cam = cam(
+            input_tensor=input_tensor,
+            targets=[ClassifierOutputTarget(predicted_idx)],
+        )[0]
+    gradcam_img = Image.fromarray(
+        show_cam_on_image(rgb_img.astype(np.float32), grayscale_cam, use_rgb=True)
+    )
 
     metrics = {
         "Fake Prob":  f"{fake_prob:.2f}",
@@ -535,22 +546,30 @@ def run_inference(image: Image.Image):
         "Input Size": "224×224",
     }
 
+    # Only report signals the model actually computed. The previous version
+    # hardcoded claims like "no copy-move forgery detected" and "facial
+    # features appear consistent" regardless of the image — nothing in this
+    # pipeline checks for copy-move forgery or facial consistency, so those
+    # lines were always false statements of confidence, not results.
     if is_fake:
         flags = [
             ("warn", "Model predicts this image is AI-generated or manipulated"),
-            ("warn", "High activation in GradCAM suggests facial region anomalies"),
-            ("info", "Check heatmap tab for specific regions of concern"),
-            ("ok",   "No copy-move forgery detected at pixel level"),
+            ("warn", "GradCAM heatmap (below) shows which regions drove this verdict"),
+            ("info", f"Fake-class confidence: {fake_prob:.0%}"),
         ]
     else:
         flags = [
             ("ok",   "Model predicts this image is authentic"),
-            ("ok",   "Probability distribution strongly favors real class"),
-            ("ok",   "Facial features appear consistent with natural photography"),
-            ("info", "Low GradCAM activation — no strong manipulation signal"),
+            ("ok",   "Probability distribution favors the real class"),
+            ("info", f"Real-class confidence: {real_prob:.0%}"),
         ]
+    if not is_verified:
+        flags.append((
+            "warn",
+            "Real/Fake label order for this checkpoint is unverified — see README before trusting verdicts",
+        ))
 
-    return is_fake, fake_prob, real_prob, metrics, flags
+    return is_fake, fake_prob, real_prob, metrics, flags, gradcam_img
 
 
 # ─── Hero ────────────────────────────────────────────────────────────────────
@@ -584,8 +603,18 @@ uploaded_file = st.file_uploader(
 
 
 # ─── Main Flow ───────────────────────────────────────────────────────────────
+if uploaded_file is not None and uploaded_file.size > MAX_UPLOAD_BYTES:
+    st.error(f"File is {uploaded_file.size / 1024 / 1024:.1f}MB — please upload an image under 10MB.")
+    uploaded_file = None
+
 if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
+    try:
+        image = Image.open(uploaded_file)
+        image = ImageOps.exif_transpose(image)  # respect phone camera rotation
+        image = image.convert("RGB")
+    except UnidentifiedImageError:
+        st.error("Couldn't read that file as an image. Please upload a JPG, PNG, or WEBP.")
+        st.stop()
 
     col_img, col_info = st.columns([1, 1], gap="large")
 
@@ -595,7 +624,7 @@ if uploaded_file is not None:
         st.image(image, use_container_width=True)
         st.markdown(f"""
         <div style="font-family:'DM Mono',monospace;font-size:0.65rem;color:#3d3a50;margin-top:0.5rem;">
-            {image.size[0]}×{image.size[1]}px · {uploaded_file.name}
+            {image.size[0]}×{image.size[1]}px · {html.escape(uploaded_file.name)}
         </div>
         """, unsafe_allow_html=True)
 
@@ -628,8 +657,7 @@ if uploaded_file is not None:
 
     if run:
         with st.spinner("Running ResNet-18 inference + GradCAM…"):
-            is_fake, fake_prob, real_prob, metrics, flags = run_inference(image)
-            gradcam_img, heatmap = generate_gradcam(image)
+            is_fake, fake_prob, real_prob, metrics, flags, gradcam_img = run_analysis(image)
 
         # ── Verdict ─────────────────────────────────────────────────────────
         conf_pct = int(fake_prob * 100) if is_fake else int(real_prob * 100)
@@ -714,8 +742,8 @@ if uploaded_file is not None:
                     <b style="color:#a78bfa">Architecture:</b> ResNet-18 fine-tuned on custom deepfake dataset<br>
                     <b style="color:#a78bfa">GradCAM layer:</b> layer4 (final convolutional block)<br>
                     <b style="color:#a78bfa">Input size:</b> 224×224 RGB<br>
-                    <b style="color:#a78bfa">Optimizer:</b> Adam · LR 3e-4 · CrossEntropyLoss<br>
-                    <b style="color:#a78bfa">Classes:</b> Fake (index 0) · Real (index 1)
+                    <b style="color:#a78bfa">Optimizer:</b> Adam · LR 1e-3 · CrossEntropyLoss<br>
+                    <b style="color:#a78bfa">Classes:</b> see deepfake_model.classes.json (label order unverified for the shipped checkpoint — see README)
                 </div>
                 """, unsafe_allow_html=True)
 

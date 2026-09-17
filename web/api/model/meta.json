@@ -1,0 +1,9 @@
+{
+  "class_to_idx": {
+    "Fake": 0,
+    "Real": 1
+  },
+  "labels_verified": false,
+  "img_size": 224,
+  "backbone": "resnet18"
+}

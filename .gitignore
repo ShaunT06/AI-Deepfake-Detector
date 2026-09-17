@@ -17,3 +17,7 @@ __pycache__/
 
 # Training artifacts
 *.trainlog.json
+
+# Local AI-agent tooling (e.g. `hf skills add`), not project code
+.agents/
+.claude/

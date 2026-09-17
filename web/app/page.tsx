@@ -1,9 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ApiError, predict, type PredictResponse } from "@/lib/api";
-
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+import { ApiError, MAX_UPLOAD_BYTES, predict, type PredictResponse } from "@/lib/api";
 
 type Status = "idle" | "loading" | "error" | "done";
 
@@ -26,7 +24,7 @@ export default function Home() {
       return;
     }
     if (f.size > MAX_UPLOAD_BYTES) {
-      setError(`File is ${(f.size / 1024 / 1024).toFixed(1)}MB — please upload an image under 10MB.`);
+      setError(`File is ${(f.size / 1024 / 1024).toFixed(1)}MB — please upload an image under 3.5MB.`);
       setFile(null);
       setPreviewUrl(null);
       return;
@@ -88,7 +86,7 @@ export default function Home() {
           📁 Upload Image
         </div>
         <div className="mb-5 font-mono text-[0.82rem]" style={{ color: "var(--muted)" }}>
-          JPG · PNG · WEBP · Max 10MB
+          JPG · PNG · WEBP · Max 3.5MB
         </div>
 
         <label

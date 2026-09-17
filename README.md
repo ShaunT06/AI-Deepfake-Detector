@@ -4,17 +4,23 @@ A deepfake image classifier with transfer learning and Grad-CAM
 explainability. Upload a face image and get a real/fake verdict plus a
 heatmap of the regions that drove it.
 
-Two ways to run this project:
-- **Streamlit app** (`app/streamlit_app.py`) — single process, model and
-  UI together. Simplest to run locally.
-- **Next.js + FastAPI** (`web/` + `backend/`) — a Vercel-hostable frontend
-  that calls a separately-hosted inference API. Use this for a real public
-  deployment: Vercel's serverless functions can't run PyTorch/OpenCV at
-  the size this model needs, so the model has to live behind its own
-  backend (Hugging Face Spaces, Render, Fly.io, ...) with the frontend
-  calling it over HTTP. See [`web/README.md`](web/README.md) and
-  [`backend/README.md`](backend/README.md) for that split, and
-  [Deploying to Vercel](#deploying-to-vercel) below for the one-time setup.
+Three ways to run this project:
+- **Next.js on Vercel, all-in-one** (`web/`) — the recommended way to
+  deploy this publicly. The model is exported to ONNX with Grad-CAM
+  baked into the graph as plain tensor ops (see
+  [`scripts/export_onnx.py`](scripts/export_onnx.py) — PyTorch's
+  autograd isn't available at inference time, so the Grad-CAM weights
+  are derived analytically instead), which lets a tiny `onnxruntime` +
+  `numpy` + `pillow` stack run entirely inside a Vercel Python
+  serverless function (`web/api/predict.py`). No separate backend host,
+  no CORS, one deploy. See [`web/README.md`](web/README.md).
+- **Streamlit app** (`app/streamlit_app.py`) — single process, full
+  PyTorch/OpenCV, model and UI together. Simplest to run locally.
+- **Next.js + separate FastAPI backend** (`web/` + `backend/`) — the
+  frontend calls a separately-hosted full-PyTorch inference API instead
+  of the bundled ONNX one. Only worth it if you need the full PyTorch
+  pipeline in production (e.g. testing a not-yet-exported architecture).
+  See [`backend/README.md`](backend/README.md).
 
 > **⚠ Before you trust a verdict from this app:** the currently-deployed
 > checkpoint (`resnet18-v1`) is a legacy model whose Real/Fake label order
@@ -40,12 +46,17 @@ app/
   streamlit_app.py   # Streamlit UI (model + UI in one process)
 scripts/
   download_model.py  # fetches the checkpoint from GitHub Releases on first run
+  export_onnx.py     # exports deepfake_model.pth -> web/api/model/*.onnx, with Grad-CAM baked in
 tests/           # pytest — runs against a tiny untrained fixture, no dataset needed
 
-web/               # Next.js frontend, deployed to Vercel — see web/README.md
-backend/           # FastAPI inference API, deployed separately — see backend/README.md
-                   # (a self-contained copy of the inference-only deepscan modules;
-                   # see backend/deepscan/__init__.py for why it's not a shared import)
+web/                     # Next.js frontend + bundled ONNX inference — see web/README.md
+  api/predict.py         # Vercel Python function: onnxruntime + numpy + pillow only
+  api/model/              # exported ONNX model, Grad-CAM colormap LUT, class-mapping metadata
+                           # (committed to git — this is a required build artifact, not sample data;
+                           # regenerate with scripts/export_onnx.py if the model changes)
+backend/                 # optional: separate full-PyTorch FastAPI API — see backend/README.md
+                         # (a self-contained copy of the inference-only deepscan modules;
+                         # see backend/deepscan/__init__.py for why it's not a shared import)
 ```
 
 ## Setup
@@ -126,38 +137,46 @@ is for).
 
 ## Deploying to Vercel
 
-The frontend (`web/`) is Vercel-hostable as-is; the backend (`backend/`)
-needs a host that runs long-lived containers, since it's a ~2GB PyTorch
-image that Vercel's serverless functions can't fit. Recommended: a free
-[Hugging Face Space](https://huggingface.co/new-space) (Docker SDK, CPU
-basic tier).
+`web/` deploys to Vercel on its own — frontend and inference API
+together, no other account or service needed:
 
-**1. Backend → Hugging Face Space**
-```bash
-# Create a Space at huggingface.co/new-space first (SDK: Docker), then:
-cd backend
-git init && git add -A && git commit -m "Deploy"
-git remote add space https://huggingface.co/spaces/<you>/<space-name>
-git push --force space main:main
-```
-Wait for the Space to build (a few minutes — it's downloading torch), then
-copy its URL, e.g. `https://<you>-<space-name>.hf.space`.
-
-**2. Frontend → Vercel**
 ```bash
 cd web
-vercel link                      # first time only
-vercel env add NEXT_PUBLIC_API_URL production   # paste the Space URL from step 1
+vercel link      # first time only
 vercel --prod
 ```
-Or connect the GitHub repo in the Vercel dashboard, set **Root Directory**
-to `web`, and add `NEXT_PUBLIC_API_URL` under Project → Settings →
-Environment Variables.
 
-Free-tier note: a Hugging Face Space (and most free container hosts)
-sleeps after inactivity — the first request after a while can take up to
-a minute while it wakes up and reloads the model. The frontend surfaces
-this as a friendly retry message rather than a hard error.
+Or connect the GitHub repo in the Vercel dashboard and set **Root
+Directory** to `web`. Vercel auto-detects `api/predict.py` as a Python
+serverless function (installing `web/requirements.txt`) alongside the
+Next.js frontend.
+
+Notes:
+- The ONNX model (`web/api/model/`) is committed to git specifically so
+  a fresh Vercel deploy always has it — see the note in
+  [Project layout](#project-layout).
+- Uploads are capped at 3.5MB (`web/api/predict.py`'s `MAX_UPLOAD_BYTES`),
+  below Vercel's own ~4.5MB request body limit.
+- If you retrain the model, regenerate the ONNX export before deploying:
+  `python scripts/export_onnx.py --checkpoint deepfake_model_v2.pth`.
+
+### Alternative: separate FastAPI backend
+
+If you'd rather run the full PyTorch pipeline (e.g. `efficientnet_b0`,
+which `export_onnx.py` doesn't support yet) behind Vercel instead of the
+bundled ONNX function, host `backend/` on a container platform (a
+[Hugging Face Space](https://huggingface.co/new-space) with Docker SDK,
+Render, Fly.io, ...) and point the frontend at it:
+
+```bash
+# backend/ — push to your chosen host, then:
+cd web
+vercel env add NEXT_PUBLIC_API_URL production   # your backend's URL
+```
+This requires switching `web/lib/api.ts` back to calling
+`NEXT_PUBLIC_API_URL` instead of the bundled `/api/predict` route (see
+git history around when `web/api/predict.py` was added) — the two
+inference paths aren't wired up simultaneously today.
 
 ## Architecture
 

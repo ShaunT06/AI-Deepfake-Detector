@@ -8,27 +8,24 @@ export interface PredictResponse {
   gradcam_image_base64: string;
 }
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
+// Inference runs inside this same Vercel deployment (web/api/predict.py,
+// onnxruntime-based — see scripts/export_onnx.py) — no external service,
+// no NEXT_PUBLIC_API_URL, no CORS.
+export const MAX_UPLOAD_BYTES = 3.5 * 1024 * 1024; // matches web/api/predict.py's own limit,
+// set below Vercel's ~4.5MB request body cap.
 
 export class ApiError extends Error {}
 
 export async function predict(file: File): Promise<PredictResponse> {
-  if (!API_URL) {
-    throw new ApiError(
-      "NEXT_PUBLIC_API_URL isn't configured. Set it to your deployed inference API's URL.",
-    );
-  }
-
-  const form = new FormData();
-  form.append("file", file);
-
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/predict`, { method: "POST", body: form });
+    res = await fetch("/api/predict", {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
   } catch {
-    throw new ApiError(
-      "Couldn't reach the inference API. It may be waking up from a cold start (this can take up to a minute on a free tier) — please try again shortly.",
-    );
+    throw new ApiError("Couldn't reach the inference API — please try again shortly.");
   }
 
   if (!res.ok) {
